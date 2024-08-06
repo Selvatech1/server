@@ -1,145 +1,129 @@
-const users = require("../models/userSchema");
-const userotp = require("../models/userOtp");
-const nodemailer = require("nodemailer");
+const jwt = require('jsonwebtoken');
+const User = require('../models/userSchema'); // Ensure the path is correct
+const UserOtp = require('../models/userOtp');
+const nodemailer = require('nodemailer');
 
-
-// email config
-const tarnsporter = nodemailer.createTransport({
+// Email configuration
+const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
         user: process.env.EMAIL,
         pass: process.env.PASSWORD
     }
-})
+});
 
-
+// User registration
 exports.userregister = async (req, res) => {
     const { fname, email, password } = req.body;
 
     if (!fname || !email || !password) {
-        res.status(400).json({ error: "Please Enter All Input Data" })
+        return res.status(400).json({ error: "Please enter all input data" });
     }
 
     try {
-        const presuer = await users.findOne({ email: email });
+        const existingUser = await User.findOne({ email });
 
-        if (presuer) {
-            res.status(400).json({ error: "This User Allready exist in our db" })
+        if (existingUser) {
+            return res.status(400).json({ error: "This user already exists in our database" });
         } else {
-            const userregister = new users({
+            const newUser = new User({
                 fname, email, password
+                // Ensure you handle password hashing here
             });
 
-            // here password hasing
-
-            const storeData = await userregister.save();
-            res.status(200).json(storeData);
+            const savedUser = await newUser.save();
+            res.status(200).json(savedUser);
         }
     } catch (error) {
-        res.status(400).json({ error: "Invalid Details", error })
+        res.status(400).json({ error: "Invalid details", error });
     }
-
 };
 
-
-
-// user send otp
+// Send OTP
 exports.userOtpSend = async (req, res) => {
     const { email } = req.body;
 
     if (!email) {
-        res.status(400).json({ error: "Please Enter Your Email" })
+        return res.status(400).json({ error: "Please enter your email" });
     }
 
-
     try {
-        const presuer = await users.findOne({ email: email });
+        const existingUser = await User.findOne({ email });
 
-        if (presuer) {
+        if (existingUser) {
             const OTP = Math.floor(100000 + Math.random() * 900000);
 
-            const existEmail = await userotp.findOne({ email: email });
+            let otpRecord = await UserOtp.findOne({ email });
 
-
-            if (existEmail) {
-                const updateData = await userotp.findByIdAndUpdate({ _id: existEmail._id }, {
-                    otp: OTP
-                }, { new: true }
-                );
-                await updateData.save();
-
-                const mailOptions = {
-                    from: process.env.EMAIL,
-                    to: email,
-                    subject: "Sending Eamil For Otp Validation",
-                    text: `OTP:- ${OTP}`
-                }
-
-
-                tarnsporter.sendMail(mailOptions, (error, info) => {
-                    if (error) {
-                        console.log("error", error);
-                        res.status(400).json({ error: "email not send" })
-                    } else {
-                        console.log("Email sent", info.response);
-                        res.status(200).json({ message: "Email sent Successfully" })
-                    }
-                })
-
+            if (otpRecord) {
+                otpRecord.otp = OTP;
+                await otpRecord.save();
             } else {
-
-                const saveOtpData = new userotp({
-                    email, otp: OTP
-                });
-
-                await saveOtpData.save();
-                const mailOptions = {
-                    from: process.env.EMAIL,
-                    to: email,
-                    subject: "Sending Eamil For Otp Validation",
-                    text: `OTP:- ${OTP}`
-                }
-
-                tarnsporter.sendMail(mailOptions, (error, info) => {
-                    if (error) {
-                        console.log("error", error);
-                        res.status(400).json({ error: "email not send" })
-                    } else {
-                        console.log("Email sent", info.response);
-                        res.status(200).json({ message: "Email sent Successfully" })
-                    }
-                })
+                otpRecord = new UserOtp({ email, otp: OTP });
+                await otpRecord.save();
             }
+
+            const mailOptions = {
+                from: process.env.EMAIL,
+                to: email,
+                subject: "OTP Validation",
+                text: `Your OTP is: ${OTP}`
+            };
+
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    console.log("Error sending email:", error);
+                    return res.status(400).json({ error: "Email not sent" });
+                } else {
+                    console.log("Email sent:", info.response);
+                    return res.status(200).json({ message: "Email sent successfully" });
+                }
+            });
         } else {
-            res.status(400).json({ error: "This User Not Exist In our Db" })
+            return res.status(400).json({ error: "This user does not exist in our database" });
         }
     } catch (error) {
-        res.status(400).json({ error: "Invalid Details", error })
+        res.status(400).json({ error: "Invalid details", error });
     }
 };
 
+// Get user data
+exports.getUserData = async (req, res) => {
+    try {
+       // const token = req.headers.authorization.split(" ")[1];
+       // const decoded = jwt.verify(token, process.env.JWT_SECRET); // Ensure JWT_SECRET is set in your environment variables
+        const user = await User.find(); // Fetch user data excluding the password
+        res.status(200).json(user);
+    } catch (error) {
+        res.status(401).json({ message: "Unauthorized" });
+    }
+};
 
-exports.userLogin = async(req,res)=>{
-    const {email,otp} = req.body;
+// User login
+exports.userLogin = async (req, res) => {
+    const { email, otp } = req.body;
 
-    if(!otp || !email){
-        res.status(400).json({ error: "Please Enter Your OTP and email" })
+    if (!otp || !email) {
+        return res.status(400).json({ error: "Please enter your OTP and email" });
     }
 
     try {
-        const otpverification = await userotp.findOne({email:email});
+        const otpRecord = await UserOtp.findOne({ email });
 
-        if(otpverification.otp === otp){
-            const preuser = await users.findOne({email:email});
+        if (otpRecord && otpRecord.otp === otp) {
+            const user = await User.findOne({ email });
 
-            // token generate
-            const token = await preuser.generateAuthtoken();
-           res.status(200).json({message:"User Login Succesfully Done",userToken:token});
-
-        }else{
-            res.status(400).json({error:"Invalid Otp"})
+            if (user) {
+                // Generate token - Ensure you have a method to generate the auth token
+                const token = await user.generateAuthToken();
+                return res.status(200).json({ message: "User login successful", userToken: token });
+            } else {
+                return res.status(400).json({ error: "User not found" });
+            }
+        } else {
+            return res.status(400).json({ error: "Invalid OTP" });
         }
     } catch (error) {
-        res.status(400).json({ error: "Invalid Details", error })
+        res.status(400).json({ error: "Invalid details", error });
     }
-}
+};
