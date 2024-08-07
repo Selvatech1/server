@@ -37,17 +37,18 @@ const userSchema = new mongoose.Schema({
 
 
 
-// hash password
-// userSchema.pre("save", async function (next) {
-//     if (this.isModified("password")) {
-//         this.password = await bcrypt.hash(this.password, 12);
-//     }
+//hash password
+userSchema.pre("save", async function (next) {
+    if (this.isModified("password")) {
+        this.password = await bcrypt.hash(this.password, 12);
+    }
 
-//     next();
-// });
+    next();
+});
 
-// token generate
+// //token generate
 // userSchema.methods.generateAuthtoken = async function(){
+//     console.log("hellow");
 //     try {
 //         let newtoken = jwt.sign({_id:this._id},SECRECT_KEY,{
 //             expiresIn:"1d"

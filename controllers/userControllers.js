@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/userSchema'); // Ensure the path is correct
 const UserOtp = require('../models/userOtp');
 const nodemailer = require('nodemailer');
+const SECRECT_KEY = process.env.SECRECT_KEY;
 
 // Email configuration
 const transporter = nodemailer.createTransport({
@@ -99,9 +100,10 @@ exports.getUserData = async (req, res) => {
     }
 };
 
-// User login
+
 exports.userLogin = async (req, res) => {
     const { email, otp } = req.body;
+    console.log(email, otp);
 
     if (!otp || !email) {
         return res.status(400).json({ error: "Please enter your OTP and email" });
@@ -109,14 +111,32 @@ exports.userLogin = async (req, res) => {
 
     try {
         const otpRecord = await UserOtp.findOne({ email });
-
+        console.log(otpRecord);
         if (otpRecord && otpRecord.otp === otp) {
             const user = await User.findOne({ email });
-
+            //console.log(user);
             if (user) {
-                // Generate token - Ensure you have a method to generate the auth token
-                const token = await user.generateAuthToken();
-                return res.status(200).json({ message: "User login successful", userToken: token });
+              //  console.log("Generating token");
+
+                const generateAuthToken = () => {
+                    try {
+                        let newToken = jwt.sign({ _id: user._id }, SECRECT_KEY, {
+                            expiresIn: "1d"
+                        });
+                        return newToken;
+                    } catch (error) {
+                        throw new Error('Token generation failed');
+                    }
+                }
+
+                const token = generateAuthToken();
+
+                if (token) {
+                    //console.log(token);
+                    return res.status(200).json({ message: "User login successful", userToken: token });
+                } else {
+                    return res.status(400).json({ error: "Token generation failed" });
+                }
             } else {
                 return res.status(400).json({ error: "User not found" });
             }
@@ -124,6 +144,6 @@ exports.userLogin = async (req, res) => {
             return res.status(400).json({ error: "Invalid OTP" });
         }
     } catch (error) {
-        res.status(400).json({ error: "Invalid details", error });
+        res.status(400).json({ error: "Invalid details", details: error.message });
     }
 };
