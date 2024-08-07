@@ -1,0 +1,4 @@
+otp-manager-jb6g.vercel.app        client
+
+
+https://server-yazi.onrender.com     server
